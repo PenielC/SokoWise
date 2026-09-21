@@ -2,7 +2,9 @@
 
 A community-powered platform that helps financially constrained consumers **discover, compare, and verify** affordable local product prices — including prices from sellers who have no online presence.
 
-Built as a proof of concept for the **Andela × Open Society Foundations civic-tech hackathon** (Transparency & Accountability track). See [`SOKOWISE_CLAUDE.md`](./SOKOWISE_CLAUDE.md) for the full product specification this build follows.
+Built as a proof of concept for the **Andela × Open Society Foundations civic-tech hackathon** (Transparency & Accountability track).
+
+**Live demo:** https://sokowise.onrender.com (hosted on Render's free plan, so the first load after idle can take about 30 seconds).
 
 > **This is a demo, not a production marketplace.** All seeded prices, sellers, and users are fictional and clearly labeled as such. No real-world current prices are implied.
 
