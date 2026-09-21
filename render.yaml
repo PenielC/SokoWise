@@ -1,0 +1,31 @@
+# Render Blueprint: one Next.js web service. The database is Neon Postgres (external).
+# Deploy with: Render Dashboard > New > Blueprint > pick this repo.
+services:
+  - type: web
+    name: sokowise
+    runtime: node
+    plan: free
+    # devDependencies are needed to build (Tailwind, TypeScript, tsx for seeding).
+    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
+    # Apply migrations and load the (idempotent) demo data, then start the server.
+    # Remove `npm run db:seed` once you no longer want demo data on boot.
+    startCommand: npx prisma migrate deploy && npm run db:seed && npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      # Neon connection strings, set in the Render dashboard (they contain a password).
+      # DATABASE_URL: Neon pooled string (host contains "-pooler"), used by the app.
+      - key: DATABASE_URL
+        sync: false
+      # DIRECT_URL: Neon direct (non-pooled) string, used by `prisma migrate deploy`.
+      - key: DIRECT_URL
+        sync: false
+      - key: AUTH_SECRET
+        generateValue: true
+      # Auth.js must trust Render's proxy host headers.
+      - key: AUTH_TRUST_HOST
+        value: true
+      # Password for every seeded demo account. Set it in the dashboard.
+      - key: SEED_DEMO_PASSWORD
+        sync: false
