@@ -1,0 +1,221 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum SystemRole {
+  USER
+  ADMIN
+}
+
+enum SellerType {
+  SUPERMARKET
+  GROCERY
+  WHOLESALER
+  MARKET_SELLER
+  INDEPENDENT_RETAILER
+}
+
+enum SellerVerificationStatus {
+  UNVERIFIED
+  VERIFIED
+  SUSPENDED
+}
+
+// A small curated list rather than the full ISO-3166 set — this is an
+// African community price-intelligence platform, not a global one, and a
+// short dropdown is far more usable on a low-bandwidth mobile device than a
+// 190+ option country picker (spec §9).
+enum Country {
+  ZIMBABWE
+  KENYA
+  SOUTH_AFRICA
+  NIGERIA
+  GHANA
+  UGANDA
+  TANZANIA
+  ZAMBIA
+  MOZAMBIQUE
+  BOTSWANA
+}
+
+enum SourceType {
+  SELLER
+  COMMUNITY
+}
+
+enum Availability {
+  IN_STOCK
+  OUT_OF_STOCK
+  UNKNOWN
+}
+
+// Admin-driven moderation state — distinct from the read-time-computed trust
+// label (see lib/trust/labels.ts). A report can be freshly-submitted and
+// ACTIVE while also being "Flagged for review" until an admin resolves it.
+enum ModerationStatus {
+  ACTIVE
+  UNDER_REVIEW
+  REMOVED
+}
+
+enum ConfirmationType {
+  STILL_ACCURATE
+  PRICE_CHANGED
+}
+
+enum FlagReason {
+  OUTDATED
+  INCORRECT_PRICE
+  SELLER_NOT_FOUND
+  SUSPICIOUS
+  OTHER
+}
+
+enum FlagStatus {
+  OPEN
+  RESOLVED_REMOVED
+  RESOLVED_DISMISSED
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  phone        String?
+  systemRole   SystemRole @default(USER)
+  createdAt    DateTime   @default(now())
+
+  seller           Seller?
+  submittedReports PriceReport[]       @relation("SubmittedReports")
+  confirmations    PriceConfirmation[]
+  flags            Flag[]
+  resolvedFlags    Flag[]              @relation("ResolvedFlags")
+  auditLogs        AuditLog[]
+}
+
+// A Seller is nullable to `userId` so an informal/offline seller (no online
+// presence, per the product's core premise) can be registered by a community
+// contributor without needing their own account.
+model Seller {
+  id                 String                   @id @default(cuid())
+  userId             String?                  @unique
+  businessName       String
+  sellerType         SellerType
+  country            Country                  @default(ZIMBABWE)
+  location           String
+  city               String                   @default("Harare")
+  contactPhone       String?
+  contactWhatsapp    String?
+  verificationStatus SellerVerificationStatus @default(UNVERIFIED)
+  createdAt          DateTime                 @default(now())
+
+  user         User?         @relation(fields: [userId], references: [id])
+  priceReports PriceReport[]
+
+  @@index([businessName])
+  @@index([country, city])
+}
+
+model Product {
+  id             String   @id @default(cuid())
+  name           String
+  normalizedName String
+  category       String
+  unit           String
+  brand          String?
+  createdAt      DateTime @default(now())
+
+  priceReports PriceReport[]
+
+  @@index([normalizedName])
+  @@index([category])
+}
+
+// A seller "updating" a price inserts a new row rather than mutating one in
+// place, so existing confirmations/flags stay attached to the exact price
+// they confirmed or flagged. The "current" price per (product, seller) is the
+// most recent ACTIVE row ordered by submittedAt.
+model PriceReport {
+  id               String            @id @default(cuid())
+  productId        String
+  sellerId         String
+  sourceType       SourceType
+  price            Decimal           @db.Decimal(10, 2)
+  currency         String            @default("USD")
+  availability     Availability      @default(UNKNOWN)
+  submittedById    String
+  submittedAt      DateTime          @default(now())
+  lastVerifiedAt   DateTime          @default(now())
+  moderationStatus ModerationStatus  @default(ACTIVE)
+  notes            String?
+
+  product     Product @relation(fields: [productId], references: [id])
+  seller      Seller  @relation(fields: [sellerId], references: [id])
+  submittedBy User    @relation("SubmittedReports", fields: [submittedById], references: [id])
+
+  confirmations PriceConfirmation[]
+  flags         Flag[]
+
+  @@index([productId])
+  @@index([sellerId])
+  @@index([moderationStatus])
+}
+
+model PriceConfirmation {
+  id               String           @id @default(cuid())
+  priceReportId    String
+  userId           String
+  confirmationType ConfirmationType @default(STILL_ACCURATE)
+  createdAt        DateTime         @default(now())
+
+  priceReport PriceReport @relation(fields: [priceReportId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+
+  @@unique([priceReportId, userId])
+}
+
+model Flag {
+  id            String     @id @default(cuid())
+  priceReportId String
+  userId        String
+  reason        FlagReason
+  comment       String?
+  status        FlagStatus @default(OPEN)
+  createdAt     DateTime   @default(now())
+  resolvedAt    DateTime?
+  resolvedById  String?
+
+  priceReport PriceReport @relation(fields: [priceReportId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+  resolvedBy  User?       @relation("ResolvedFlags", fields: [resolvedById], references: [id])
+
+  @@unique([priceReportId, userId])
+  @@index([status])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+}
